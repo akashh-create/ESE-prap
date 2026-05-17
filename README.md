@@ -70,4 +70,25 @@ GET /api/shortlists
 - Set `FRONTEND_URL` on the backend to the deployed frontend URL.
 - Set `VITE_API_URL` on the frontend to the deployed backend `/api` URL.
 
+### Render Backend Settings
+
+Use these settings when deploying the backend service on Render:
+
+```text
+Root Directory: backend
+Build Command: npm install
+Start Command: npm start
+```
+
+Add these environment variables in Render:
+
+```env
+MONGODB_URI=your_mongodb_atlas_connection_string
+FRONTEND_URL=https://your-frontend-domain.com
+OPENROUTER_API_KEY=your_openrouter_api_key
+OPENROUTER_MODEL=openai/gpt-5.2
+```
+
+Do not set `PORT` on Render. Render injects it automatically.
+
 # ESE-prap
