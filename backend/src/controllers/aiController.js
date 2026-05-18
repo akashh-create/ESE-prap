@@ -1,46 +1,68 @@
-import Candidate from "../models/Candidate.js";
-import { matchCandidates } from "../services/matchService.js";
-import { getAiShortlist } from "../services/openRouterService.js";
+import Employee from "../models/Employee.js";
+import { getEmployeeRecommendations } from "../services/openRouterService.js";
 
-export async function aiShortlistCandidates(req, res, next) {
+function basicRecommendation(employee) {
+  const missingCoreSkills = ["Leadership", "Communication", "Cloud", "Data Analysis"].filter(
+    (skill) => !employee.skills.some((employeeSkill) => employeeSkill.toLowerCase() === skill.toLowerCase())
+  );
+
+  let recommendation = "Focus on structured training and measurable quarterly goals.";
+
+  if (employee.performanceScore >= 85 && employee.experience >= 3) {
+    recommendation = "Strong promotion-ready employee with consistent performance and sufficient experience.";
+  } else if (employee.performanceScore < 60) {
+    recommendation = "Needs improvement plan, mentoring, and skill enhancement support.";
+  } else if (missingCoreSkills.length) {
+    recommendation = `Recommended training areas: ${missingCoreSkills.slice(0, 2).join(", ")}.`;
+  }
+
+  return {
+    employeeId: String(employee._id),
+    aiRank: 0,
+    recommendation,
+    trainingSuggestions: missingCoreSkills.slice(0, 3),
+    promotionReadiness:
+      employee.performanceScore >= 85 && employee.experience >= 3 ? "High" : "Needs Review",
+    feedback: recommendation
+  };
+}
+
+export async function recommendEmployees(req, res, next) {
   try {
-    const candidates = await Candidate.find();
-    const basicResults = matchCandidates(candidates, req.body);
-    const aiResult = await getAiShortlist({ job: req.body, candidates: basicResults });
+    const employees = await Employee.find().sort({ performanceScore: -1, experience: -1 });
+    const aiResult = await getEmployeeRecommendations({ employees });
 
     const rankingMap = new Map(
-      (aiResult.rankings || aiResult.candidates || []).map((item) => [
-        String(item.candidateId),
+      (aiResult.rankings || []).map((item) => [
+        String(item.employeeId),
         item
       ])
     );
 
-    const merged = basicResults
-      .map((candidate) => {
-        const aiCandidate = rankingMap.get(String(candidate._id));
+    const merged = employees
+      .map((item) => {
+        const employee = item.toObject();
+        const aiEmployee = rankingMap.get(String(employee._id)) || basicRecommendation(employee);
         return {
-          ...candidate,
-          aiRank: aiCandidate?.aiRank,
-          fitScore: aiCandidate?.fitScore,
-          aiRecommendation:
-            aiCandidate?.recommendation ||
-            aiCandidate?.aiRecommendation ||
-            "AI did not return a specific explanation for this candidate.",
-          interviewQuestions: aiCandidate?.interviewQuestions || []
+          ...employee,
+          aiRank: aiEmployee.aiRank,
+          recommendation: aiEmployee.recommendation,
+          trainingSuggestions: aiEmployee.trainingSuggestions || [],
+          promotionReadiness: aiEmployee.promotionReadiness || "Needs Review",
+          feedback: aiEmployee.feedback || aiEmployee.recommendation
         };
       })
       .sort((a, b) => {
         if (a.aiRank && b.aiRank) return a.aiRank - b.aiRank;
         if (a.aiRank) return -1;
         if (b.aiRank) return 1;
-        return b.matchScore - a.matchScore;
+        return b.performanceScore - a.performanceScore;
       });
 
     res.json({
-      job: req.body,
       aiAvailable: aiResult.aiAvailable !== false,
-      summary: aiResult.summary || aiResult.recommendation,
-      candidates: merged
+      summary: aiResult.summary,
+      employees: merged
     });
   } catch (error) {
     next(error);

@@ -1,7 +1,7 @@
 {
-  "name": "candidate-shortlisting-frontend",
+  "name": "employee-performance-frontend",
   "version": "1.0.0",
-  "description": "React frontend for candidate shortlisting and OpenRouter AI recommendations.",
+  "description": "React frontend for AI-based employee performance analytics.",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",

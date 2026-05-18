@@ -1,8 +1,9 @@
 import { Router } from "express";
-import { aiShortlistCandidates } from "../controllers/aiController.js";
+import { recommendEmployees } from "../controllers/aiController.js";
+import { protect } from "../middleware/authMiddleware.js";
 
 const router = Router();
 
-router.post("/shortlist", aiShortlistCandidates);
+router.post("/recommend", protect, recommendEmployees);
 
 export default router;

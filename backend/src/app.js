@@ -1,10 +1,9 @@
 import cors from "cors";
 import express from "express";
 import morgan from "morgan";
-import candidateRoutes from "./routes/candidateRoutes.js";
-import matchRoutes from "./routes/matchRoutes.js";
+import authRoutes from "./routes/authRoutes.js";
+import employeeRoutes from "./routes/employeeRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
-import shortlistRoutes from "./routes/shortlistRoutes.js";
 import { errorHandler, notFoundHandler } from "./utils/errorHandlers.js";
 
 const app = express();
@@ -16,13 +15,12 @@ app.use(express.json({ limit: "1mb" }));
 app.use(morgan("dev"));
 
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", service: "candidate-shortlisting-api" });
+  res.json({ status: "ok", service: "employee-performance-api" });
 });
 
-app.use("/api/candidates", candidateRoutes);
-app.use("/api/match", matchRoutes);
+app.use("/api/auth", authRoutes);
+app.use("/api/employees", employeeRoutes);
 app.use("/api/ai", aiRoutes);
-app.use("/api/shortlists", shortlistRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

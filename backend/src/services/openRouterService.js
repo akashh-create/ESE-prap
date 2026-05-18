@@ -1,53 +1,53 @@
-export async function getAiShortlist({ job, candidates }) {
+export async function getEmployeeRecommendations({ employees }) {
   if (!process.env.OPENROUTER_API_KEY) {
     return {
       aiAvailable: false,
-      recommendation:
-        "OpenRouter API key is not configured. Basic matching results are shown instead.",
-      candidates: candidates.map((candidate, index) => ({
-        candidateId: String(candidate._id),
+      summary:
+        "OpenRouter API key is not configured. Rule-based recommendations are shown instead.",
+      rankings: employees.map((employee, index) => ({
+        employeeId: String(employee._id),
         aiRank: index + 1,
-        aiRecommendation: "Ranked using skill overlap and experience criteria."
+        recommendation: "Ranked using performance score, experience, and available skills.",
+        trainingSuggestions: [],
+        promotionReadiness: employee.performanceScore >= 85 ? "High" : "Needs Review",
+        feedback: "Rule-based feedback generated because AI is not configured."
       }))
     };
   }
 
   const model = process.env.OPENROUTER_MODEL || "openai/gpt-5.2";
-  const compactCandidates = candidates.slice(0, 20).map((candidate, index) => ({
+  const compactEmployees = employees.slice(0, 30).map((employee, index) => ({
     index: index + 1,
-    id: String(candidate._id),
-    name: candidate.name,
-    skills: candidate.skills,
-    experience: candidate.experience,
-    bio: candidate.bio,
-    projects: candidate.projects,
-    basicMatchPercentage: candidate.matchPercentage,
-    matchedSkills: candidate.matchedSkills
+    id: String(employee._id),
+    name: employee.name,
+    email: employee.email,
+    department: employee.department,
+    skills: employee.skills,
+    performanceScore: employee.performanceScore,
+    experience: employee.experience
   }));
 
   const prompt = `
-You are helping a recruiter shortlist candidates.
+You are an HR analytics assistant.
 Return only valid JSON with this shape:
 {
-  "summary": "brief overall recommendation",
+  "summary": "brief overall workforce recommendation",
   "rankings": [
     {
-      "candidateId": "candidate id",
+      "employeeId": "employee id",
       "aiRank": 1,
-      "fitScore": 92,
-      "recommendation": "2-3 sentence explanation",
-      "interviewQuestions": ["question 1", "question 2", "question 3"]
+      "recommendation": "2-3 sentence promotion or improvement recommendation",
+      "trainingSuggestions": ["training area 1", "training area 2"],
+      "promotionReadiness": "High | Medium | Low",
+      "feedback": "direct HR feedback"
     }
   ]
 }
 
-Job:
-Required skills: ${job.requiredSkills.join(", ")}
-Preferred skills: ${(job.preferredSkills || []).join(", ") || "None"}
-Minimum experience: ${job.minExperience} years
+Rank employees for promotion readiness and recommend training. Consider performance score, years of experience, department, and skills.
 
-Candidates:
-${JSON.stringify(compactCandidates, null, 2)}
+Employees:
+${JSON.stringify(compactEmployees, null, 2)}
 `;
 
   const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -56,7 +56,7 @@ ${JSON.stringify(compactCandidates, null, 2)}
       Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
       "HTTP-Referer": process.env.FRONTEND_URL || "http://localhost:5173",
-      "X-Title": "Candidate Shortlisting System"
+      "X-Title": "Employee Performance Analytics"
     },
     body: JSON.stringify({
       model,

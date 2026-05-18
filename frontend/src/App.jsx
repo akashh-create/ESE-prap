@@ -1,64 +1,53 @@
-import { BriefcaseBusiness } from "lucide-react";
+import { LogOut, ShieldCheck } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import CandidateForm from "./components/CandidateForm.jsx";
-import CandidateList from "./components/CandidateList.jsx";
-import JobForm from "./components/JobForm.jsx";
-import Results from "./components/Results.jsx";
+import AnalyticsPanel from "./components/AnalyticsPanel.jsx";
+import AuthPanel from "./components/AuthPanel.jsx";
+import EmployeeForm from "./components/EmployeeForm.jsx";
+import EmployeeList from "./components/EmployeeList.jsx";
+import FilterBar from "./components/FilterBar.jsx";
 import { api } from "./services/api.js";
 
 export default function App() {
-  const [candidates, setCandidates] = useState([]);
-  const [search, setSearch] = useState("");
-  const [results, setResults] = useState([]);
-  const [currentJob, setCurrentJob] = useState(null);
+  const [user, setUser] = useState(() => {
+    const savedUser = localStorage.getItem("user");
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+  const [employees, setEmployees] = useState([]);
+  const [recommendations, setRecommendations] = useState([]);
   const [summary, setSummary] = useState("");
+  const [filters, setFilters] = useState({ name: "", department: "", skill: "", minScore: "" });
+  const [editingEmployee, setEditingEmployee] = useState(null);
   const [status, setStatus] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isSavingCandidate, setIsSavingCandidate] = useState(false);
-  const [isSavingShortlist, setIsSavingShortlist] = useState(false);
+  const [isSavingEmployee, setIsSavingEmployee] = useState(false);
 
-  const candidateCount = useMemo(() => candidates.length, [candidates]);
-  const topScore = useMemo(
-    () => (results.length ? results[0].fitScore || results[0].matchPercentage : 0),
-    [results]
-  );
+  const averageScore = useMemo(() => {
+    if (!employees.length) return 0;
+    return Math.round(employees.reduce((total, employee) => total + employee.performanceScore, 0) / employees.length);
+  }, [employees]);
 
-  async function loadCandidates(value = search) {
-    const data = await api.getCandidates(value);
-    setCandidates(data);
+  const topEmployee = useMemo(() => employees[0]?.name || "None", [employees]);
+
+  async function loadEmployees() {
+    const data = await api.getEmployees();
+    setEmployees(data);
   }
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      loadCandidates(search).catch((error) => setStatus(error.message));
-    }, 250);
-
-    return () => clearTimeout(timeout);
-  }, [search]);
-
-  async function addCandidate(candidate) {
-    setIsSavingCandidate(true);
-    setStatus("");
-    try {
-      await api.addCandidate(candidate);
-      await loadCandidates("");
-      setSearch("");
-      setStatus("Candidate added successfully.");
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      setIsSavingCandidate(false);
+    if (user) {
+      loadEmployees().catch((error) => setStatus(error.message));
     }
-  }
+  }, [user]);
 
-  async function runMatch(job) {
-    setIsLoading(true);
+  async function handleAuth(mode, payload) {
     setStatus("");
-    setSummary("");
+    setIsLoading(true);
     try {
-      const data = await api.matchCandidates(job);
-      setCurrentJob(data.job);
-      setResults(data.candidates);
+      const data = mode === "login" ? await api.login(payload) : await api.signup(payload);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
+      setUser(data.user);
+      setStatus("");
     } catch (error) {
       setStatus(error.message);
     } finally {
@@ -66,16 +55,69 @@ export default function App() {
     }
   }
 
-  async function runAiMatch(job) {
+  function logout() {
+    localStorage.removeItem("token");
+    localStorage.removeItem("user");
+    setUser(null);
+    setEmployees([]);
+    setRecommendations([]);
+  }
+
+  async function saveEmployee(employee) {
+    setIsSavingEmployee(true);
+    setStatus("");
+    try {
+      if (editingEmployee) {
+        await api.updateEmployee(editingEmployee._id, employee);
+        setStatus("Employee updated successfully.");
+      } else {
+        await api.addEmployee(employee);
+        setStatus("Employee stored successfully.");
+      }
+      setEditingEmployee(null);
+      await loadEmployees();
+    } catch (error) {
+      setStatus(error.message);
+    } finally {
+      setIsSavingEmployee(false);
+    }
+  }
+
+  async function deleteEmployee(id) {
+    setStatus("");
+    try {
+      await api.deleteEmployee(id);
+      setStatus("Employee removed successfully.");
+      await loadEmployees();
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
+  async function searchEmployees() {
+    setStatus("");
+    try {
+      const data = await api.searchEmployees(filters);
+      setEmployees(data);
+    } catch (error) {
+      setStatus(error.message);
+    }
+  }
+
+  async function resetFilters() {
+    setFilters({ name: "", department: "", skill: "", minScore: "" });
+    await loadEmployees();
+  }
+
+  async function getRecommendations() {
     setIsLoading(true);
     setStatus("");
     try {
-      const data = await api.aiShortlist(job);
-      setCurrentJob(data.job);
-      setResults(data.candidates);
+      const data = await api.getRecommendations();
+      setRecommendations(data.employees);
       setSummary(data.summary || "");
       if (!data.aiAvailable) {
-        setStatus("OpenRouter is not configured, so basic ranking was used.");
+        setStatus("OpenRouter is not configured, so rule-based recommendations were used.");
       }
     } catch (error) {
       setStatus(error.message);
@@ -84,21 +126,8 @@ export default function App() {
     }
   }
 
-  async function saveShortlist() {
-    if (!currentJob || results.length === 0) {
-      setStatus("Run a match before saving a shortlist.");
-      return;
-    }
-
-    setIsSavingShortlist(true);
-    try {
-      await api.saveShortlist({ job: currentJob, candidates: results.slice(0, 5) });
-      setStatus("Shortlist saved.");
-    } catch (error) {
-      setStatus(error.message);
-    } finally {
-      setIsSavingShortlist(false);
-    }
+  if (!user) {
+    return <AuthPanel onAuth={handleAuth} status={status} />;
   }
 
   return (
@@ -106,37 +135,60 @@ export default function App() {
       <header className="app-header">
         <div>
           <div className="brand-line">
-            <BriefcaseBusiness size={24} />
-            <span>Talent Match</span>
+            <ShieldCheck size={24} />
+            <span>HR Performance AI</span>
           </div>
-          <h1>Candidate Shortlisting System</h1>
+          <h1>Employee Performance Analytics</h1>
         </div>
         <div className="metric-strip">
           <div>
-            <span>Candidates</span>
-            <strong>{candidateCount}</strong>
+            <span>Employees</span>
+            <strong>{employees.length}</strong>
           </div>
           <div>
-            <span>Top Match</span>
-            <strong>{topScore}%</strong>
+            <span>Average Score</span>
+            <strong>{averageScore}</strong>
+          </div>
+          <div>
+            <span>Top Performer</span>
+            <strong className="small-metric">{topEmployee}</strong>
           </div>
         </div>
       </header>
+
+      <div className="user-bar">
+        <span>{user.name} | {user.role}</span>
+        <button className="icon-button" type="button" onClick={logout}>
+          <LogOut size={17} />
+          Logout
+        </button>
+      </div>
 
       {status && <div className="status-banner">{status}</div>}
 
       <div className="workspace-grid">
         <div className="left-column">
-          <CandidateForm onSubmit={addCandidate} isSaving={isSavingCandidate} />
-          <CandidateList candidates={candidates} search={search} onSearch={setSearch} />
+          <EmployeeForm
+            editingEmployee={editingEmployee}
+            onCancelEdit={() => setEditingEmployee(null)}
+            onSubmit={saveEmployee}
+            isSaving={isSavingEmployee}
+          />
+          <FilterBar
+            filters={filters}
+            onChange={setFilters}
+            onSearch={searchEmployees}
+            onReset={resetFilters}
+          />
+          <EmployeeList employees={employees} onEdit={setEditingEmployee} onDelete={deleteEmployee} />
         </div>
         <div className="right-column">
-          <JobForm onMatch={runMatch} onAiMatch={runAiMatch} isLoading={isLoading} />
-          <Results
-            results={results}
+          <AnalyticsPanel
+            employees={employees}
+            recommendations={recommendations}
             summary={summary}
-            onSave={saveShortlist}
-            isSaving={isSavingShortlist}
+            onRecommend={getRecommendations}
+            isLoading={isLoading}
           />
         </div>
       </div>
